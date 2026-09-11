@@ -3,7 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>나만의 테트리스</title>
+  
+  <!-- 기본 타이틀 및 설명 -->
+  <title>진용이가 만든 테트리스</title>
+  <meta name="description" content="80년대 레트로 BGM과 춤추는 캐릭터가 함께하는 나만의 테트리스 웹 게임">
+
+  <!-- Open Graph (카카오톡, 페이스북, 슬랙 등) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="진용이가 만든 테트리스">
+  <meta property="og:description" content="80년대 레트로 BGM과 춤추는 캐릭터가 함께하는 나만의 테트리스 웹 게임! 지금 플레이해보세요.">
+  <meta property="og:image" content="og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="진용이가 만든 테트리스">
+  <meta name="twitter:description" content="80년대 레트로 BGM과 춤추는 캐릭터가 함께하는 나만의 테트리스 웹 게임! 지금 플레이해보세요.">
+  <meta name="twitter:image" content="og.png">
+
   <style>
     * {
       box-sizing: border-box;
@@ -98,7 +116,7 @@
     h1 {
       margin: 0 0 10px 0;
       font-size: 24px;
-      letter-spacing: 3px;
+      letter-spacing: 2px;
       text-transform: uppercase;
       color: #00e5ff;
       text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
@@ -135,7 +153,7 @@
       background-image: url('back.png');
       background-size: cover;
       background-position: center;
-      opacity: 0.45; /* 블록 가독성을 위해 기본 투명도 설정 */
+      opacity: 0.45;
       filter: brightness(0.9) contrast(1.05);
       transition: filter 0.3s ease, transform 0.3s ease, opacity 0.3s ease;
       z-index: 1;
@@ -183,7 +201,7 @@
       top: 0;
       left: 0;
       z-index: 2;
-      background-color: transparent; /* 배경 이미지가 투과되도록 투명 처리 */
+      background-color: transparent;
       display: block;
     }
 
@@ -251,7 +269,7 @@
       line-height: 1.6;
     }
 
-    /* 게임 오버 오버레이 */
+    /* 게임 오버 오버레이 모달 */
     .game-over-overlay {
       position: absolute;
       top: 0;
@@ -319,7 +337,7 @@
       transform: translateY(-2px);
     }
 
-    /* 모바일 조작 */
+    /* 모바일 가상 패드 */
     .touch-controls {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -416,11 +434,11 @@
     </div>
   </div>
 
-  <h1>TETRIS</h1>
+  <h1>진용이가 만든 테트리스</h1>
 
   <div class="game-container">
     <div class="canvas-wrap">
-      <!-- 상황에 반응하는 배경 이미지 레이어 -->
+      <!-- 상황에 반응하는 배경 이미지 레이어 (back.png) -->
       <div id="board-bg" class="board-bg"></div>
 
       <!-- 테트리스 캔버스 -->
@@ -553,7 +571,6 @@
       checkDangerLevel();
     }
 
-    // 배경의 위험 감지 (블록이 상단 6칸 이내로 차올랐을 때)
     function checkDangerLevel() {
       if (!isRunning) return;
       let hasDanger = false;
@@ -570,7 +587,6 @@
       }
     }
 
-    // 웃고 기뻐하는 반응 트리거 (줄 삭제 시)
     function triggerHappyReaction() {
       boardBg.classList.remove('danger');
       boardBg.classList.add('happy');
@@ -603,7 +619,7 @@
         player.score += rowCount * 10 * rowCount;
         player.lines += rowCount;
         updateScore();
-        triggerHappyReaction(); // 줄을 없앨 때 배경과 아저씨가 크게 웃고 반응!
+        triggerHappyReaction();
       }
     }
 
@@ -614,7 +630,6 @@
             context.fillStyle = COLORS[value];
             context.fillRect(x + offset.x, y + offset.y, 1, 1);
             
-            // 블록 테두리 광택
             context.lineWidth = 0.05;
             context.strokeStyle = 'rgba(255, 255, 255, 0.8)';
             context.strokeRect(x + offset.x, y + offset.y, 1, 1);
@@ -624,7 +639,6 @@
     }
 
     function draw() {
-      // 캔버스 자체를 투명하게 지워 뒤의 back.png가 비치도록 설정
       context.clearRect(0, 0, canvas.width, canvas.height);
 
       drawMatrix(arena, { x: 0, y: 0 });
@@ -695,7 +709,6 @@
       bgm.pause();
       dancerContainer.classList.remove('dancing', 'hyper-dancing');
 
-      // 배경을 우울/정지 상태로 변경
       boardBg.classList.remove('happy', 'danger');
       boardBg.classList.add('sad');
 
@@ -778,7 +791,7 @@
       }
     }
 
-    // 키보드 조작 이벤트
+    // 키보드 조작
     document.addEventListener('keydown', event => {
       if (!isRunning) return;
 
@@ -796,7 +809,7 @@
       }
     });
 
-    // 모바일 버튼 바인딩
+    // 모바일 조작 버튼
     document.getElementById('btn-left').addEventListener('click', () => isRunning && playerMove(-1));
     document.getElementById('btn-right').addEventListener('click', () => isRunning && playerMove(1));
     document.getElementById('btn-rotate').addEventListener('click', () => isRunning && playerRotate(1));
