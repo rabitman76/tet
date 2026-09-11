@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>나만의 테트리스</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      background: radial-gradient(circle at center, #24243a 0%, #12121b 100%);
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 10px;
+    }
+
+    /* 상단 춤추는 러시아 아저씨 */
+    .dancer-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .dancer-svg {
+      width: 75px;
+      height: 75px;
+      overflow: visible;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+    }
+
+    .dancing #body-torso {
+      animation: squatBounce 0.45s infinite alternate ease-in-out;
+      transform-origin: 50px 70px;
+    }
+    .dancing #left-arm {
+      animation: armDanceL 0.45s infinite alternate ease-in-out;
+      transform-origin: 36px 44px;
+    }
+    .dancing #right-arm {
+      animation: armDanceR 0.45s infinite alternate ease-in-out;
+      transform-origin: 64px 44px;
+    }
+    .dancing #left-leg {
+      animation: kickLeft 0.45s infinite alternate ease-in-out;
+      transform-origin: 40px 66px;
+    }
+    .dancing #right-leg {
+      animation: kickRight 0.45s infinite alternate ease-in-out;
+      transform-origin: 60px 66px;
+    }
+
+    /* 점수 획득 시 신나게 빠른 춤 */
+    .hyper-dancing #body-torso {
+      animation: squatBounce 0.22s infinite alternate ease-in-out !important;
+    }
+    .hyper-dancing #left-arm {
+      animation: armDanceL 0.22s infinite alternate ease-in-out !important;
+    }
+    .hyper-dancing #right-arm {
+      animation: armDanceR 0.22s infinite alternate ease-in-out !important;
+    }
+    .hyper-dancing #left-leg {
+      animation: kickLeft 0.22s infinite alternate ease-in-out !important;
+    }
+    .hyper-dancing #right-leg {
+      animation: kickRight 0.22s infinite alternate ease-in-out !important;
+    }
+
+    @keyframes squatBounce {
+      0% { transform: translateY(0) scaleY(1); }
+      100% { transform: translateY(6px) scaleY(0.92); }
+    }
+    @keyframes armDanceL {
+      0% { transform: rotate(-15deg); }
+      100% { transform: rotate(35deg); }
+    }
+    @keyframes armDanceR {
+      0% { transform: rotate(35deg); }
+      100% { transform: rotate(-20deg); }
+    }
+    @keyframes kickLeft {
+      0% { transform: rotate(-35deg) scaleX(1.1); }
+      100% { transform: rotate(10deg); }
+    }
+    @keyframes kickRight {
+      0% { transform: rotate(-10deg); }
+      100% { transform: rotate(40deg) scaleX(1.1); }
+    }
+
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 24px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #00e5ff;
+      text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    }
+
+    .game-container {
+      display: flex;
+      gap: 20px;
+      background: #202033;
+      padding: 18px;
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+      position: relative;
+    }
+
+    /* 테트리스 캔버스 및 배경 사진 래퍼 */
+    .canvas-wrap {
+      position: relative;
+      width: 240px;
+      height: 400px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid #363654;
+      background: #000;
+    }
+
+    /* back.png 배경 이미지 레이어 */
+    .board-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('back.png');
+      background-size: cover;
+      background-position: center;
+      opacity: 0.45; /* 블록 가독성을 위해 기본 투명도 설정 */
+      filter: brightness(0.9) contrast(1.05);
+      transition: filter 0.3s ease, transform 0.3s ease, opacity 0.3s ease;
+      z-index: 1;
+    }
+
+    /* 1) 활짝 웃고 환호하는 상태 (라인 클리어 시) */
+    .board-bg.happy {
+      opacity: 0.85;
+      filter: brightness(1.3) saturate(1.4) drop-shadow(0 0 12px #fffa65);
+      transform: scale(1.08) rotate(1deg);
+      animation: joyfulBounce 0.5s ease-out;
+    }
+
+    /* 2) 위기 상황 (블록이 상단 근처까지 찼을 때) */
+    .board-bg.danger {
+      opacity: 0.7;
+      filter: brightness(0.7) sepia(0.8) hue-rotate(310deg) saturate(3);
+      animation: tremble 0.2s infinite;
+    }
+
+    /* 3) 게임 오버 (슬픔/정지) */
+    .board-bg.sad {
+      opacity: 0.25;
+      filter: grayscale(1) brightness(0.4);
+      transform: scale(0.98);
+    }
+
+    @keyframes joyfulBounce {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.12) translateY(-4px); }
+      70% { transform: scale(1.04) translateY(2px); }
+      100% { transform: scale(1.08); }
+    }
+
+    @keyframes tremble {
+      0% { transform: translate(1px, 1px) rotate(0deg); }
+      25% { transform: translate(-1px, -2px) rotate(-1deg); }
+      50% { transform: translate(-2px, 0px) rotate(1deg); }
+      75% { transform: translate(2px, 1px) rotate(0deg); }
+      100% { transform: translate(1px, -1px) rotate(0deg); }
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2;
+      background-color: transparent; /* 배경 이미지가 투과되도록 투명 처리 */
+      display: block;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 130px;
+    }
+    .info-box {
+      background: #171726;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #31314d;
+    }
+    .info-box h3 {
+      margin: 0 0 6px 0;
+      font-size: 12px;
+      color: #9d96fc;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .info-box p {
+      margin: 0;
+      font-size: 22px;
+      font-weight: bold;
+      color: #fff;
+    }
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    button {
+      background: #00e5ff;
+      color: #0d1117;
+      border: none;
+      padding: 11px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 229, 255, 0.3);
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #38eeff;
+      transform: translateY(-1px);
+    }
+    button:active {
+      transform: translateY(1px);
+    }
+    .btn-secondary {
+      background: #353552;
+      color: #fff;
+      box-shadow: none;
+    }
+    .btn-secondary:hover {
+      background: #47476c;
+    }
+    .controls-guide {
+      font-size: 11px;
+      color: #9e9eb4;
+      line-height: 1.6;
+    }
+
+    /* 게임 오버 오버레이 */
+    .game-over-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 15, 24, 0.88);
+      backdrop-filter: blur(5px);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 10;
+      padding: 20px;
+      text-align: center;
+    }
+    .game-over-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .game-over-title {
+      font-size: 28px;
+      font-weight: 900;
+      color: #ff3366;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin: 0 0 10px 0;
+      text-shadow: 0 0 14px rgba(255, 51, 102, 0.7);
+    }
+    .game-over-stats {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 10px 18px;
+      margin-bottom: 20px;
+      width: 85%;
+    }
+    .game-over-stats p {
+      margin: 6px 0;
+      font-size: 14px;
+      color: #cfcfe2;
+      display: flex;
+      justify-content: space-between;
+    }
+    .game-over-stats span {
+      font-weight: bold;
+      color: #00e5ff;
+    }
+    .btn-restart {
+      background: linear-gradient(135deg, #00e5ff, #7928ca);
+      color: white;
+      padding: 12px 24px;
+      font-size: 15px;
+      border-radius: 25px;
+      border: none;
+      box-shadow: 0 4px 15px rgba(0, 229, 255, 0.4);
+      cursor: pointer;
+    }
+    .btn-restart:hover {
+      box-shadow: 0 6px 20px rgba(0, 229, 255, 0.6);
+      transform: translateY(-2px);
+    }
+
+    /* 모바일 조작 */
+    .touch-controls {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 15px;
+      width: 100%;
+      max-width: 300px;
+    }
+    .touch-btn {
+      background: #2e2e46;
+      color: #fff;
+      font-size: 16px;
+      padding: 12px 0;
+      border-radius: 6px;
+      box-shadow: none;
+    }
+    .touch-btn:active {
+      background: #444468;
+    }
+    .wide-btn {
+      grid-column: span 3;
+      background: #4844b3;
+    }
+
+    @media (max-width: 480px) {
+      .game-container {
+        flex-direction: column;
+        align-items: center;
+      }
+      .sidebar {
+        width: 100%;
+        flex-direction: row;
+        gap: 10px;
+      }
+      .info-box {
+        margin-bottom: 0;
+        flex: 1;
+      }
+      .controls-guide {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 배경음악 (동일 폴더 bgm.mp3) -->
+  <audio id="bgm" src="bgm.mp3" loop preload="auto"></audio>
+
+  <!-- 테트리스 상단 춤추는 러시아 아저씨 -->
+  <div class="dancer-stage">
+    <div id="dancer-container" class="dancer-svg">
+      <svg viewBox="0 0 100 100" width="100%" height="100%">
+        <ellipse cx="50" cy="94" rx="24" ry="5" fill="rgba(0,0,0,0.3)" />
+
+        <g id="left-leg">
+          <path d="M 40 68 L 22 84 L 14 84 L 14 91 L 28 91 L 43 72 Z" fill="#151522" stroke="#d63031" stroke-width="1.5" />
+          <polygon points="12,83 23,83 26,93 10,93" fill="#8b0000" />
+        </g>
+        <g id="right-leg">
+          <path d="M 60 68 L 78 84 L 86 84 L 86 91 L 72 91 L 57 72 Z" fill="#151522" stroke="#d63031" stroke-width="1.5" />
+          <polygon points="77,83 88,83 90,93 74,93" fill="#8b0000" />
+        </g>
+
+        <g id="body-torso">
+          <path d="M 36 44 L 64 44 L 67 68 L 33 68 Z" fill="#d63031" />
+          <rect x="33" y="62" width="34" height="6" fill="#f1c40f" rx="1" />
+          <rect x="47" y="61" width="6" height="8" fill="#e67e22" />
+
+          <g id="left-arm">
+            <path d="M 36 46 L 16 54 L 20 62 L 35 55 Z" fill="#b71515" />
+            <circle cx="16" cy="58" r="4.5" fill="#fcd3a1" />
+          </g>
+          <g id="right-arm">
+            <path d="M 64 46 L 84 54 L 80 62 L 65 55 Z" fill="#b71515" />
+            <circle cx="84" cy="58" r="4.5" fill="#fcd3a1" />
+          </g>
+
+          <rect x="46" y="38" width="8" height="6" fill="#fcd3a1" />
+          <circle cx="50" cy="30" r="13" fill="#fcd3a1" />
+          <ellipse cx="50" cy="30" rx="2.5" ry="3.5" fill="#f3a683" />
+          <circle cx="45" cy="26" r="1.8" fill="#2d3436" />
+          <circle cx="55" cy="26" r="1.8" fill="#2d3436" />
+          <path d="M 40 33 Q 50 30 60 33 Q 64 39 58 37 Q 50 35 42 37 Q 36 39 40 33 Z" fill="#59300b" />
+          <path d="M 47 38 Q 50 41 53 38" stroke="#a0300a" stroke-width="1.8" fill="none" stroke-linecap="round" />
+
+          <path d="M 33 22 C 33 10, 67 10, 67 22 Z" fill="#2c3e50" />
+          <rect x="31" y="19" width="38" height="7" rx="3" fill="#7f8c8d" />
+          <path d="M 31 22 L 28 34 L 35 34 L 35 24 Z" fill="#7f8c8d" />
+          <path d="M 69 22 L 72 34 L 65 34 L 65 24 Z" fill="#7f8c8d" />
+          <polygon points="50,15 51.5,19 55.5,19 52.3,21.5 53.5,25.5 50,23 46.5,25.5 47.7,21.5 44.5,19 48.5,19" fill="#e74c3c" />
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <h1>TETRIS</h1>
+
+  <div class="game-container">
+    <div class="canvas-wrap">
+      <!-- 상황에 반응하는 배경 이미지 레이어 -->
+      <div id="board-bg" class="board-bg"></div>
+
+      <!-- 테트리스 캔버스 -->
+      <canvas id="tetris" width="240" height="400"></canvas>
+
+      <!-- 게임오버 오버레이 모달 -->
+      <div id="game-over-overlay" class="game-over-overlay">
+        <h2 class="game-over-title">GAME OVER</h2>
+        <div class="game-over-stats">
+          <p>최종 점수: <span id="final-score">0</span></p>
+          <p>제거한 줄: <span id="final-lines">0</span></p>
+          <p>최고 점수: <span id="best-score">0</span></p>
+        </div>
+        <button id="retry-btn" class="btn-restart">다시 도전하기 ↻</button>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div>
+        <div class="info-box">
+          <h3>점수</h3>
+          <p id="score">0</p>
+        </div>
+        <div class="info-box">
+          <h3>줄 수</h3>
+          <p id="lines">0</p>
+        </div>
+        <div class="info-box controls-guide">
+          <h3>조작법</h3>
+          ← / → : 이동<br>
+          ↑ : 회전<br>
+          ↓ : 소프트 드롭<br>
+          Space : 하드 드롭
+        </div>
+      </div>
+      <div class="btn-group">
+        <button id="start-btn">게임 시작</button>
+        <button id="music-toggle-btn" class="btn-secondary">BGM: ON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 모바일 조작 가상 패드 -->
+  <div class="touch-controls">
+    <button class="touch-btn" id="btn-left">◀</button>
+    <button class="touch-btn" id="btn-rotate">↻</button>
+    <button class="touch-btn" id="btn-right">▶</button>
+    <button class="touch-btn wide-btn" id="btn-down">▼ 빠른 내리기</button>
+    <button class="touch-btn wide-btn" id="btn-drop">⤓ 하드 드롭</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('tetris');
+    const context = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+    const linesElement = document.getElementById('lines');
+    const startBtn = document.getElementById('start-btn');
+    const retryBtn = document.getElementById('retry-btn');
+    const musicToggleBtn = document.getElementById('music-toggle-btn');
+    const bgm = document.getElementById('bgm');
+
+    const gameOverOverlay = document.getElementById('game-over-overlay');
+    const finalScoreEl = document.getElementById('final-score');
+    const finalLinesEl = document.getElementById('final-lines');
+    const bestScoreEl = document.getElementById('best-score');
+    const dancerContainer = document.getElementById('dancer-container');
+    const boardBg = document.getElementById('board-bg');
+
+    let bestScore = 0;
+    bgm.volume = 0.5;
+    let isMusicMuted = false;
+    let happyTimer = null;
+
+    const BLOCK_SIZE = 20;
+    const COLS = 12;
+    const ROWS = 20;
+
+    context.scale(BLOCK_SIZE, BLOCK_SIZE);
+
+    const COLORS = [
+      null,
+      '#FF0D72', // T
+      '#0DC2FF', // I
+      '#0DFF72', // S
+      '#F538FF', // Z
+      '#FF8E0D', // L
+      '#FFE138', // J
+      '#3877FF'  // O
+    ];
+
+    function createPiece(type) {
+      if (type === 'T') return [[0, 1, 0], [1, 1, 1], [0, 0, 0]];
+      if (type === 'I') return [[0, 2, 0, 0], [0, 2, 0, 0], [0, 2, 0, 0], [0, 2, 0, 0]];
+      if (type === 'S') return [[0, 3, 3], [3, 3, 0], [0, 0, 0]];
+      if (type === 'Z') return [[4, 4, 0], [0, 4, 4], [0, 0, 0]];
+      if (type === 'L') return [[0, 5, 0], [0, 5, 0], [0, 5, 5]];
+      if (type === 'J') return [[0, 6, 0], [0, 6, 0], [6, 6, 0]];
+      if (type === 'O') return [[7, 7], [7, 7]];
+    }
+
+    function createMatrix(width, height) {
+      const matrix = [];
+      while (height--) {
+        matrix.push(new Array(width).fill(0));
+      }
+      return matrix;
+    }
+
+    function collide(arena, player) {
+      const [m, o] = [player.matrix, player.pos];
+      for (let y = 0; y < m.length; ++y) {
+        for (let x = 0; x < m[y].length; ++x) {
+          if (m[y][x] !== 0 &&
+             (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function merge(arena, player) {
+      player.matrix.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value !== 0) {
+            arena[y + player.pos.y][x + player.pos.x] = value;
+          }
+        });
+      });
+      checkDangerLevel();
+    }
+
+    // 배경의 위험 감지 (블록이 상단 6칸 이내로 차올랐을 때)
+    function checkDangerLevel() {
+      if (!isRunning) return;
+      let hasDanger = false;
+      for (let y = 0; y < 6; y++) {
+        if (arena[y].some(val => val !== 0)) {
+          hasDanger = true;
+          break;
+        }
+      }
+      if (hasDanger) {
+        boardBg.classList.add('danger');
+      } else {
+        boardBg.classList.remove('danger');
+      }
+    }
+
+    // 웃고 기뻐하는 반응 트리거 (줄 삭제 시)
+    function triggerHappyReaction() {
+      boardBg.classList.remove('danger');
+      boardBg.classList.add('happy');
+      dancerContainer.classList.add('hyper-dancing');
+
+      if (happyTimer) clearTimeout(happyTimer);
+      happyTimer = setTimeout(() => {
+        boardBg.classList.remove('happy');
+        dancerContainer.classList.remove('hyper-dancing');
+        checkDangerLevel();
+      }, 900);
+    }
+
+    function arenaSweep() {
+      let rowCount = 0;
+      outer: for (let y = arena.length - 1; y >= 0; --y) {
+        for (let x = 0; x < arena[y].length; ++x) {
+          if (arena[y][x] === 0) {
+            continue outer;
+          }
+        }
+
+        const row = arena.splice(y, 1)[0].fill(0);
+        arena.unshift(row);
+        ++y;
+        rowCount++;
+      }
+
+      if (rowCount > 0) {
+        player.score += rowCount * 10 * rowCount;
+        player.lines += rowCount;
+        updateScore();
+        triggerHappyReaction(); // 줄을 없앨 때 배경과 아저씨가 크게 웃고 반응!
+      }
+    }
+
+    function drawMatrix(matrix, offset) {
+      matrix.forEach((row, y) => {
+        row.forEach((value, x) => {
+          if (value !== 0) {
+            context.fillStyle = COLORS[value];
+            context.fillRect(x + offset.x, y + offset.y, 1, 1);
+            
+            // 블록 테두리 광택
+            context.lineWidth = 0.05;
+            context.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            context.strokeRect(x + offset.x, y + offset.y, 1, 1);
+          }
+        });
+      });
+    }
+
+    function draw() {
+      // 캔버스 자체를 투명하게 지워 뒤의 back.png가 비치도록 설정
+      context.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawMatrix(arena, { x: 0, y: 0 });
+      if (player.matrix) {
+        drawMatrix(player.matrix, player.pos);
+      }
+    }
+
+    function rotate(matrix, dir) {
+      for (let y = 0; y < matrix.length; ++y) {
+        for (let x = 0; x < y; ++x) {
+          [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+        }
+      }
+      if (dir > 0) {
+        matrix.forEach(row => row.reverse());
+      } else {
+        matrix.reverse();
+      }
+    }
+
+    function playerRotate(dir) {
+      const pos = player.pos.x;
+      let offset = 1;
+      rotate(player.matrix, dir);
+      while (collide(arena, player)) {
+        player.pos.x += offset;
+        offset = -(offset + (offset > 0 ? 1 : -1));
+        if (offset > player.matrix[0].length) {
+          rotate(player.matrix, -dir);
+          player.pos.x = pos;
+          return;
+        }
+      }
+    }
+
+    function playerDrop() {
+      player.pos.y++;
+      if (collide(arena, player)) {
+        player.pos.y--;
+        merge(arena, player);
+        playerReset();
+        arenaSweep();
+      }
+      dropCounter = 0;
+    }
+
+    function playerHardDrop() {
+      while (!collide(arena, player)) {
+        player.pos.y++;
+      }
+      player.pos.y--;
+      merge(arena, player);
+      playerReset();
+      arenaSweep();
+      dropCounter = 0;
+    }
+
+    function playerMove(dir) {
+      player.pos.x += dir;
+      if (collide(arena, player)) {
+        player.pos.x -= dir;
+      }
+    }
+
+    function triggerGameOver() {
+      isRunning = false;
+      bgm.pause();
+      dancerContainer.classList.remove('dancing', 'hyper-dancing');
+
+      // 배경을 우울/정지 상태로 변경
+      boardBg.classList.remove('happy', 'danger');
+      boardBg.classList.add('sad');
+
+      if (player.score > bestScore) {
+        bestScore = player.score;
+      }
+
+      finalScoreEl.innerText = player.score;
+      finalLinesEl.innerText = player.lines;
+      bestScoreEl.innerText = bestScore;
+
+      gameOverOverlay.classList.add('active');
+    }
+
+    function playerReset() {
+      const pieces = 'ILJOTSZ';
+      player.matrix = createPiece(pieces[(pieces.length * Math.random()) | 0]);
+      player.pos.y = 0;
+      player.pos.x = ((arena[0].length / 2) | 0) - ((player.matrix[0].length / 2) | 0);
+
+      if (collide(arena, player)) {
+        triggerGameOver();
+      }
+    }
+
+    function updateScore() {
+      scoreElement.innerText = player.score;
+      linesElement.innerText = player.lines;
+    }
+
+    let dropCounter = 0;
+    let dropInterval = 1000;
+    let lastTime = 0;
+    let isRunning = false;
+
+    function update(time = 0) {
+      if (!isRunning) return;
+
+      const deltaTime = time - lastTime;
+      lastTime = time;
+
+      dropCounter += deltaTime;
+      if (dropCounter > dropInterval) {
+        playerDrop();
+      }
+
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    const arena = createMatrix(COLS, ROWS);
+    const player = {
+      pos: { x: 0, y: 0 },
+      matrix: null,
+      score: 0,
+      lines: 0,
+    };
+
+    function startNewGame() {
+      gameOverOverlay.classList.remove('active');
+      boardBg.classList.remove('sad', 'danger', 'happy');
+
+      arena.forEach(row => row.fill(0));
+      player.score = 0;
+      player.lines = 0;
+      updateScore();
+
+      bgm.currentTime = 0;
+      bgm.play().catch(e => console.log('BGM 재생 대기:', e));
+
+      dancerContainer.classList.add('dancing');
+
+      playerReset();
+      startBtn.innerText = '재시작';
+
+      if (!isRunning) {
+        isRunning = true;
+        lastTime = performance.now();
+        update();
+      }
+    }
+
+    // 키보드 조작 이벤트
+    document.addEventListener('keydown', event => {
+      if (!isRunning) return;
+
+      if (event.keyCode === 37) { // Left
+        playerMove(-1);
+      } else if (event.keyCode === 39) { // Right
+        playerMove(1);
+      } else if (event.keyCode === 40) { // Down
+        playerDrop();
+      } else if (event.keyCode === 38) { // Up
+        playerRotate(1);
+      } else if (event.keyCode === 32) { // Space
+        event.preventDefault();
+        playerHardDrop();
+      }
+    });
+
+    // 모바일 버튼 바인딩
+    document.getElementById('btn-left').addEventListener('click', () => isRunning && playerMove(-1));
+    document.getElementById('btn-right').addEventListener('click', () => isRunning && playerMove(1));
+    document.getElementById('btn-rotate').addEventListener('click', () => isRunning && playerRotate(1));
+    document.getElementById('btn-down').addEventListener('click', () => isRunning && playerDrop());
+    document.getElementById('btn-drop').addEventListener('click', () => isRunning && playerHardDrop());
+
+    musicToggleBtn.addEventListener('click', () => {
+      isMusicMuted = !isMusicMuted;
+      bgm.muted = isMusicMuted;
+      musicToggleBtn.innerText = isMusicMuted ? 'BGM: OFF' : 'BGM: ON';
+    });
+
+    startBtn.addEventListener('click', startNewGame);
+    retryBtn.addEventListener('click', startNewGame);
+
+    draw();
+  </script>
+</body>
+</html>
