@@ -130,7 +130,7 @@
       position: relative;
     }
 
-    /* 테트리스 캔버스 및 배경 사진 래퍼 */
+    /* 테트리스 캔버스 래퍼 */
     .canvas-wrap {
       position: relative;
       width: 240px;
@@ -199,6 +199,43 @@
       display: block;
     }
 
+    /* 스테이지 시작/공지 알림 배너 */
+    .stage-banner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.7);
+      background: rgba(13, 17, 23, 0.92);
+      border: 2px solid #00e5ff;
+      border-radius: 12px;
+      padding: 14px 20px;
+      text-align: center;
+      z-index: 8;
+      box-shadow: 0 0 25px rgba(0, 229, 255, 0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      width: 85%;
+    }
+    .stage-banner.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .stage-banner h2 {
+      margin: 0;
+      font-size: 20px;
+      color: #00e5ff;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-shadow: 0 0 8px #00e5ff;
+    }
+    .stage-banner p {
+      margin: 6px 0 0 0;
+      font-size: 13px;
+      color: #ffd152;
+      font-weight: 600;
+    }
+
     .sidebar {
       display: flex;
       flex-direction: column;
@@ -226,7 +263,7 @@
       color: #fff;
     }
     
-    /* 다음 블록 미리보기 박스 */
+    /* 다음 블록 미리보기 컨테이너 */
     .next-canvas-container {
       display: flex;
       justify-content: center;
@@ -281,7 +318,7 @@
       line-height: 1.5;
     }
 
-    /* 게임 오버 오버레이 */
+    /* 게임 오버 오버레이 모달 */
     .game-over-overlay {
       position: absolute;
       top: 0;
@@ -451,11 +488,17 @@
 
   <div class="game-container">
     <div class="canvas-wrap">
-      <!-- 반응하는 배경 이미지 (back.png) -->
+      <!-- 배경 이미지 (back.png) -->
       <div id="board-bg" class="board-bg"></div>
 
       <!-- 메인 테트리스 캔버스 -->
       <canvas id="tetris" width="240" height="400"></canvas>
+
+      <!-- 스테이지 안내 배너 -->
+      <div id="stage-banner" class="stage-banner">
+        <h2 id="banner-title">STAGE 1</h2>
+        <p id="banner-desc">목표: 5줄 제거</p>
+      </div>
 
       <!-- 게임오버 모달 -->
       <div id="game-over-overlay" class="game-over-overlay">
@@ -472,7 +515,7 @@
     <!-- 우측 사이드바 -->
     <div class="sidebar">
       <div>
-        <!-- 다음 블록 미리보기 박스 -->
+        <!-- 다음 블록 박스 -->
         <div class="info-box">
           <h3>다음 블록</h3>
           <div class="next-canvas-container">
@@ -482,7 +525,7 @@
 
         <div class="info-box">
           <h3>스테이지</h3>
-          <p id="stage">1 / 30</p>
+          <p id="stage">1</p>
         </div>
         <div class="info-box">
           <h3>점수</h3>
@@ -530,6 +573,10 @@
     const musicToggleBtn = document.getElementById('music-toggle-btn');
     const bgm = document.getElementById('bgm');
 
+    const stageBanner = document.getElementById('stage-banner');
+    const bannerTitle = document.getElementById('banner-title');
+    const bannerDesc = document.getElementById('banner-desc');
+
     const gameOverOverlay = document.getElementById('game-over-overlay');
     const gameOverTitle = document.getElementById('game-over-title');
     const finalStageEl = document.getElementById('final-stage');
@@ -541,12 +588,48 @@
     bgm.volume = 0.5;
     let isMusicMuted = false;
     let happyTimer = null;
+    let isTransitioning = false; // 스테이지 전환/채우기 애니메이션 중 플래그
+
+    // Web Audio API를 활용한 자체 '뽕' 사운드 합성기
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playPopSound() {
+      try {
+        initAudio();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        const now = audioCtx.currentTime;
+        // 주파수를 짧은 시간에 급격히 올려 톡 튀는 '뽕!' 효과음 구현
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
+
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.16);
+      } catch (e) {
+        // 브라우저 권한 제약 시 무시
+      }
+    }
 
     const BLOCK_SIZE = 20;
     const COLS = 12;
     const ROWS = 20;
 
-    // 메인 캔버스 20배 스케일
     context.scale(BLOCK_SIZE, BLOCK_SIZE);
 
     const COLORS = [
@@ -603,7 +686,7 @@
     }
 
     function checkDangerLevel() {
-      if (!isRunning) return;
+      if (!isRunning || isTransitioning) return;
       let hasDanger = false;
       for (let y = 0; y < 6; y++) {
         if (arena[y].some(val => val !== 0)) {
@@ -631,8 +714,110 @@
       }, 900);
     }
 
+    // 각 스테이지 요구 라인 수 계산 (1스테이지: 5줄, 2스테이지: 7줄...)
     function getLinesRequiredForStage(s) {
       return 5 + (s - 1) * 2;
+    }
+
+    // 10판마다 속도 가속
+    function updateSpeed() {
+      const tier = Math.floor((player.stage - 1) / 10);
+      dropInterval = Math.max(250, 1000 - tier * 250);
+    }
+
+    // 스테이지 시작 배너 공지
+    function announceStage(stageNum, callback) {
+      if (stageNum === 30) {
+        bannerTitle.innerText = "THE LAST STAGE";
+        bannerDesc.innerText = `마지막 결전: ${getLinesRequiredForStage(30)}줄 제거!`;
+      } else {
+        bannerTitle.innerText = `STAGE ${stageNum}`;
+        bannerDesc.innerText = `목표: ${getLinesRequiredForStage(stageNum)}줄 제거`;
+      }
+
+      stageBanner.classList.add('show');
+      setTimeout(() => {
+        stageBanner.classList.remove('show');
+        if (callback) callback();
+      }, 1600);
+    }
+
+    // 스테이지 클리어 시 보드를 테트리스로 가득 채우는 축하 연출
+    function playStageClearFillEffect(onComplete) {
+      isTransitioning = true;
+      let currentRow = ROWS - 1;
+
+      const fillInterval = setInterval(() => {
+        if (currentRow >= 0) {
+          for (let x = 0; x < COLS; x++) {
+            // 다양한 색상 블록으로 화려하게 채우기
+            arena[currentRow][x] = ((x + currentRow) % 7) + 1;
+          }
+          draw();
+          currentRow--;
+        } else {
+          clearInterval(fillInterval);
+          setTimeout(() => {
+            // 채워진 보드 초기화 후 다음 스테이지 진입
+            arena.forEach(row => row.fill(0));
+            draw();
+            isTransitioning = false;
+            if (onComplete) onComplete();
+          }, 600);
+        }
+      }, 35);
+    }
+
+    // 중력 적용 (공중에 뜬 블록을 아래로 떨어뜨림)
+    function applyGravity() {
+      let moved = false;
+      for (let x = 0; x < COLS; x++) {
+        for (let y = ROWS - 2; y >= 0; y--) {
+          if (arena[y][x] !== 0 && arena[y + 1][x] === 0) {
+            let targetY = y;
+            while (targetY + 1 < ROWS && arena[targetY + 1][x] === 0) {
+              arena[targetY + 1][x] = arena[targetY][x];
+              arena[targetY][x] = 0;
+              targetY++;
+              moved = true;
+            }
+          }
+        }
+      }
+      return moved;
+    }
+
+    // 한 줄 완성 검사 및 중력 연쇄(Cascade) 삭제 루프
+    function arenaSweepCascade() {
+      let totalClearedLines = 0;
+
+      while (true) {
+        let clearedThisTurn = 0;
+        outer: for (let y = arena.length - 1; y >= 0; --y) {
+          for (let x = 0; x < arena[y].length; ++x) {
+            if (arena[y][x] === 0) {
+              continue outer;
+            }
+          }
+
+          const row = arena.splice(y, 1)[0].fill(0);
+          arena.unshift(row);
+          ++y;
+          clearedThisTurn++;
+        }
+
+        if (clearedThisTurn > 0) {
+          totalClearedLines += clearedThisTurn;
+          playPopSound(); // 줄이 사라질 때 뽕! 효과음 재생
+          applyGravity(); // 밑에 빈 칸이 있으면 남은 퍼즐 조각이 낙하
+        } else {
+          break; // 더 이상 완성된 줄이 없으면 종료
+        }
+      }
+
+      if (totalClearedLines > 0) {
+        updateStageProgress(totalClearedLines);
+      }
     }
 
     function updateStageProgress(rowCount) {
@@ -640,48 +825,32 @@
       player.lines += rowCount;
       player.stageLinesLeft -= rowCount;
 
+      triggerHappyReaction();
+
+      // 현재 스테이지 목표 달성 시
       if (player.stageLinesLeft <= 0) {
         if (player.stage < 30) {
-          player.stage++;
-          const required = getLinesRequiredForStage(player.stage);
-          player.stageLinesLeft = required + player.stageLinesLeft;
-          updateSpeed();
+          // 스테이지 클리어 연출 (화면 가득 채우기)
+          playStageClearFillEffect(() => {
+            player.stage++;
+            player.stageLinesLeft = getLinesRequiredForStage(player.stage);
+            updateSpeed();
+            updateUI();
+
+            // 다음 스테이지 시작 공지
+            announceStage(player.stage, () => {
+              playerReset();
+            });
+          });
         } else {
           triggerVictory();
-          return;
         }
-      }
-
-      updateUI();
-      triggerHappyReaction();
-    }
-
-    function updateSpeed() {
-      const tier = Math.floor((player.stage - 1) / 10);
-      dropInterval = Math.max(300, 1000 - tier * 250);
-    }
-
-    function arenaSweep() {
-      let rowCount = 0;
-      outer: for (let y = arena.length - 1; y >= 0; --y) {
-        for (let x = 0; x < arena[y].length; ++x) {
-          if (arena[y][x] === 0) {
-            continue outer;
-          }
-        }
-
-        const row = arena.splice(y, 1)[0].fill(0);
-        arena.unshift(row);
-        ++y;
-        rowCount++;
-      }
-
-      if (rowCount > 0) {
-        updateStageProgress(rowCount);
+      } else {
+        updateUI();
       }
     }
 
-    // 메인 게임판 렌더링
+    // 메인 게임 보드 렌더링
     function drawMatrix(matrix, offset) {
       matrix.forEach((row, y) => {
         row.forEach((value, x) => {
@@ -697,17 +866,16 @@
       });
     }
 
-    // 우측 상단 '다음 블록' 박스 전용 렌더링
+    // 다음 블록 미리보기 렌더링
     function drawNextPiece() {
       nextContext.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
       if (!player.nextMatrix) return;
 
       const matrix = player.nextMatrix;
-      const size = 14; // 미니 블록 픽셀 크기
+      const size = 14;
       const pieceWidth = matrix[0].length * size;
       const pieceHeight = matrix.length * size;
 
-      // 미니 캔버스(80x60) 중앙 정렬 위치 계산
       const startX = Math.floor((nextCanvas.width - pieceWidth) / 2);
       const startY = Math.floor((nextCanvas.height - pieceHeight) / 2);
 
@@ -732,7 +900,7 @@
       context.clearRect(0, 0, canvas.width, canvas.height);
 
       drawMatrix(arena, { x: 0, y: 0 });
-      if (player.matrix) {
+      if (player.matrix && !isTransitioning) {
         drawMatrix(player.matrix, player.pos);
       }
     }
@@ -751,6 +919,7 @@
     }
 
     function playerRotate(dir) {
+      if (isTransitioning) return;
       const pos = player.pos.x;
       let offset = 1;
       rotate(player.matrix, dir);
@@ -766,28 +935,35 @@
     }
 
     function playerDrop() {
+      if (isTransitioning) return;
       player.pos.y++;
       if (collide(arena, player)) {
         player.pos.y--;
         merge(arena, player);
-        playerReset();
-        arenaSweep();
+        arenaSweepCascade(); // 줄 삭제 + 중력 연쇄 적용
+        if (!isTransitioning) {
+          playerReset();
+        }
       }
       dropCounter = 0;
     }
 
     function playerHardDrop() {
+      if (isTransitioning) return;
       while (!collide(arena, player)) {
         player.pos.y++;
       }
       player.pos.y--;
       merge(arena, player);
-      playerReset();
-      arenaSweep();
+      arenaSweepCascade(); // 줄 삭제 + 중력 연쇄 적용
+      if (!isTransitioning) {
+        playerReset();
+      }
       dropCounter = 0;
     }
 
     function playerMove(dir) {
+      if (isTransitioning) return;
       player.pos.x += dir;
       if (collide(arena, player)) {
         player.pos.x -= dir;
@@ -805,7 +981,7 @@
       gameOverTitle.innerText = "GAME OVER";
       gameOverTitle.style.color = "#ff3366";
 
-      finalStageEl.innerText = player.stage;
+      finalStageEl.innerText = player.stage === 30 ? "The Last Stage" : player.stage;
       finalScoreEl.innerText = player.score;
       finalLinesEl.innerText = player.lines;
 
@@ -818,10 +994,10 @@
       dancerContainer.classList.remove('dancing', 'hyper-dancing');
       boardBg.classList.remove('happy', 'danger', 'sad');
 
-      gameOverTitle.innerText = "VICTORY! 🎉";
+      gameOverTitle.innerText = "ALL CLEAR! 🎉";
       gameOverTitle.style.color = "#00e5ff";
 
-      finalStageEl.innerText = player.stage + " (클리어)";
+      finalStageEl.innerText = "The Last Stage (완전 정복)";
       finalScoreEl.innerText = player.score;
       finalLinesEl.innerText = player.lines;
 
@@ -840,7 +1016,6 @@
       player.matrix = player.nextMatrix;
       player.nextMatrix = getRandomPiece();
       
-      // 우측 상단 박스에 다음 블록 그리기
       drawNextPiece();
 
       player.pos.y = 0;
@@ -853,8 +1028,8 @@
 
     function updateUI() {
       scoreElement.innerText = player.score;
-      stageElement.innerText = `${player.stage} / 30`;
-      linesLeftElement.innerText = player.stageLinesLeft;
+      stageElement.innerText = player.stage === 30 ? "The Last Stage" : `${player.stage} / 30`;
+      linesLeftElement.innerText = Math.max(0, player.stageLinesLeft);
     }
 
     let dropCounter = 0;
@@ -868,9 +1043,11 @@
       const deltaTime = time - lastTime;
       lastTime = time;
 
-      dropCounter += deltaTime;
-      if (dropCounter > dropInterval) {
-        playerDrop();
+      if (!isTransitioning) {
+        dropCounter += deltaTime;
+        if (dropCounter > dropInterval) {
+          playerDrop();
+        }
       }
 
       draw();
@@ -889,6 +1066,7 @@
     };
 
     function startNewGame() {
+      initAudio();
       gameOverOverlay.classList.remove('active');
       boardBg.classList.remove('sad', 'danger', 'happy');
 
@@ -906,19 +1084,22 @@
       dancerContainer.classList.add('dancing');
 
       player.nextMatrix = null;
-      playerReset();
       startBtn.innerText = '재시작';
 
-      if (!isRunning) {
-        isRunning = true;
-        lastTime = performance.now();
-        update();
-      }
+      // 스테이지 1 시작 공지 배너 후 게임 시작
+      announceStage(1, () => {
+        playerReset();
+        if (!isRunning) {
+          isRunning = true;
+          lastTime = performance.now();
+          update();
+        }
+      });
     }
 
     // 키보드 조작
     document.addEventListener('keydown', event => {
-      if (!isRunning) return;
+      if (!isRunning || isTransitioning) return;
 
       if (event.keyCode === 37) { // Left
         playerMove(-1);
